@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <title>Simple markers</title>
+    <style>
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      #map {
+        height: 100%;
+      }
+    </style>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script>
+      var busList = {bus:{},tram:{},train:{}};
+      var baseBusPosUrl = '/api/positions';
+      var is_active_ajax = false;
+
+      var map, marker;
+
+      function ajaxData() {
+        var x = {bus:[],tram:[],train:[]};
+        for (type in busList) {
+          for (i in busList[type]) {
+            x[type][x[type].length] = jQuery.trim(i);
+          }
+        }
+        return x;
+      }
+
+      function dodajAktualizujMarker3(data) {
+        data.name0 = data.name;
+        data.name = data.name.toLowerCase();
+        if (busList[data.type][data.name]) {
+          if (!busList[data.type][data.name][data.k]) {
+            busList[data.type][data.name][data.k] = {};
+          }
+          if (busList[data.type][data.name][data.k]['marker']) {
+            var latlng = new google.maps.LatLng(data.x, data.y);
+            if (data.y > busList[data.type][data.name][data.k]['marker'].getPosition().lng()) {
+              busList[data.type][data.name][data.k]['marker'].setLabel('H');
+            } else {
+              busList[data.type][data.name][data.k]['marker'].setLabel('W');
+            }
+
+            busList[data.type][data.name][data.k]['marker'].setPosition(latlng);
+          }
+          else {
+            var marker = new google.maps.Marker({
+                position: {lat: data.x, lng: data.y},
+                map: map,
+                title: '' + data.k
+            });
+
+            busList[data.type][data.name][data.k]['marker'] = marker;
+            busList[data.type][data.name][data.k]['name'] = data.name0;
+            busList[data.type][data.name][data.k]['type'] = data.type;
+          }
+        }
+      }
+
+      function countProperties(obj) {
+        var count = 0;
+        for(var prop in obj) {
+          if(obj.hasOwnProperty(prop)) {
+            count++;
+          }
+        }
+        return count;
+      }
+
+      function usunMartwePojazdy(data) {
+        var kk = {};
+        if ( (typeof data == 'object') && (data.length > 0) ) {
+          for (i in data) {
+            kk[data[i].k] = true;
+          }
+        }
+        
+        for (type in busList) {
+          for (name in busList[type]) {
+            for (k in busList[type][name]) {
+              if ( (!kk[k]) || (kk[k].name != name) || (kk[k].type != type) ) {
+                try {
+                  busList[type][name][k]['marker'].setMap(null);
+                  delete busList[type][name][k];
+                } catch(err) {
+                }
+              }
+            }
+          }
+        }
+      }
+
+      function pobieraj(re) {
+        if (!is_active_ajax) {
+          if ((countProperties(busList.bus) > 0) || (countProperties(busList.tram) > 0) || (countProperties(busList.train) > 0)) {
+            is_active_ajax = true;
+            $.post(
+              baseBusPosUrl,
+              JSON.stringify(ajaxData(busList))
+            ).done(function(data){
+              var vehicles = JSON.parse(data);
+//              usunMartwePojazdy(vehicles);
+              for (i in vehicles) {
+                dodajAktualizujMarker3(vehicles[i]);
+              }
+              is_active_ajax = false;
+            }).fail(function(){
+              is_active_ajax = false;
+            });
+          }
+        }
+        if (!re) {
+          setTimeout(pobieraj, 15000);
+        }
+      };
+
+      function init() {
+        jQuery(document).ready(function() {
+            var wroclaw = {lat: 51.105386, lng: 17.018906};
+
+            map = new google.maps.Map(document.getElementById('map'), {
+              zoom: 17,
+              center: wroclaw,
+              mapTypeId: google.maps.MapTypeId.ROADMAP
+            });
+
+            busList['$$VEHICLE_TYPE']['$$NUMBER'] = {};
+            pobieraj(false)
+        });
+      }
+    </script>
+    <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=$$GOOGLE_MAPS_KEY&callback=init">
+    </script>
+  </body>
+</html>
